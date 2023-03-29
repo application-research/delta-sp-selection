@@ -61,7 +61,7 @@ type Pricing struct {
 	StoragePrice string `json:"storagePrice"`
 }
 
-func fetchProviders(minPieceSize, maxPieceSize int64) ([]Provider, error) {
+func fetchProviders(sizeInBytes int64) ([]Provider, error) {
 	response, err := http.Get("https://data.storage.market/api/providers")
 	if err != nil {
 		return nil, err
@@ -82,9 +82,11 @@ func fetchProviders(minPieceSize, maxPieceSize int64) ([]Provider, error) {
 	// Filter providers by piece size
 	var filteredProviders []Provider
 	for _, provider := range providers.Providers {
-		pvMinPieceSize, _ := strconv.Atoi(provider.MinPieceSizeBytes)
-		pvMaxPieceSize, _ := strconv.Atoi(provider.MaxPieceSizeBytes)
-		if int64(pvMinPieceSize) >= minPieceSize && int64(pvMaxPieceSize) <= maxPieceSize {
+		pvMinPieceSize, _ := strconv.ParseInt(provider.MinPieceSizeBytes, 10, 64)
+		pvMaxPieceSize, _ := strconv.ParseInt(provider.MaxPieceSizeBytes, 10, 64)
+		fmt.Println("pvMinPieceSize, pvMaxPieceSize", pvMinPieceSize, pvMaxPieceSize)
+		fmt.Println("sizeInBytes", sizeInBytes)
+		if pvMinPieceSize <= sizeInBytes && pvMaxPieceSize >= sizeInBytes {
 			filteredProviders = append(filteredProviders, provider)
 		}
 	}
@@ -123,18 +125,11 @@ func providerInfoHandler(w http.ResponseWriter, r *http.Request) {
 }
 func providersHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
-	minPieceSize, _ := strconv.ParseInt(r.URL.Query().Get("min_piece_size_bytes"), 10, 64)
-	maxPieceSize, _ := strconv.ParseInt(r.URL.Query().Get("max_piece_size_bytes"), 10, 64)
+	sizeInBytes, _ := strconv.ParseInt(r.URL.Query().Get("size_bytes"), 10, 64)
+	//minPieceSize, _ := strconv.ParseInt(r.URL.Query().Get("min_piece_size_bytes"), 10, 64)
+	//maxPieceSize, _ := strconv.ParseInt(r.URL.Query().Get("max_piece_size_bytes"), 10, 64)
 
-	// Use default values if query parameters are not provided
-	if minPieceSize == 0 {
-		minPieceSize = 1
-	}
-	if maxPieceSize == 0 {
-		maxPieceSize = 1 << 62 // A large number, for example: 2^62
-	}
-
-	providers, err := fetchProviders(minPieceSize, maxPieceSize)
+	providers, err := fetchProviders(sizeInBytes)
 	if err != nil {
 		http.Error(w, "Error fetching providers: "+err.Error(), http.StatusInternalServerError)
 		return
