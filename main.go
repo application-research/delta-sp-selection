@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -13,6 +14,11 @@ import (
 
 type StorageProvider struct {
 	Providers []Provider `json:"storageProviders"`
+}
+
+type IpApiResponse struct {
+	Lat float64 `json:"lat"`
+	Lon float64 `json:"lon"`
 }
 
 type ProviderSelect struct {
@@ -61,7 +67,7 @@ type Pricing struct {
 	StoragePrice string `json:"storagePrice"`
 }
 
-func fetchProviders(sizeInBytes int64) ([]Provider, error) {
+func fetchProviders(sizeInBytes int64, sourceIp string) ([]Provider, error) {
 	response, err := http.Get("https://data.storage.market/api/providers")
 	if err != nil {
 		return nil, err
@@ -89,6 +95,19 @@ func fetchProviders(sizeInBytes int64) ([]Provider, error) {
 		if pvMinPieceSize <= sizeInBytes && pvMaxPieceSize >= sizeInBytes {
 			filteredProviders = append(filteredProviders, provider)
 		}
+	}
+
+	if sourceIp != "" {
+		// Filter providers by source IP
+		var ips []string
+		var providerIps []Provider
+		for _, provider := range filteredProviders {
+			for _, a := range provider.Multiaddrs.Addresses {
+				ips = append(ips, a)
+				providerIps = append(providerIps, provider)
+			}
+		}
+		return providerIps, nil
 	}
 
 	return filteredProviders, nil
@@ -126,10 +145,12 @@ func providerInfoHandler(w http.ResponseWriter, r *http.Request) {
 func providersHandler(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	sizeInBytes, _ := strconv.ParseInt(r.URL.Query().Get("size_bytes"), 10, 64)
+	sourceIp := r.URL.Query().Get("source_ip")
+
 	//minPieceSize, _ := strconv.ParseInt(r.URL.Query().Get("min_piece_size_bytes"), 10, 64)
 	//maxPieceSize, _ := strconv.ParseInt(r.URL.Query().Get("max_piece_size_bytes"), 10, 64)
 
-	providers, err := fetchProviders(sizeInBytes)
+	providers, err := fetchProviders(sizeInBytes, sourceIp)
 	if err != nil {
 		http.Error(w, "Error fetching providers: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -140,19 +161,114 @@ func providersHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Select one random provider
-	rand.Seed(time.Now().UnixNano())
-	randomIndex := rand.Intn(len(providers))
-	randomProvider := providers[randomIndex]
+	if sourceIp != "" {
+		nearestFromTheIp, err := NearestIPCoordinate(sourceIp, providers)
+		if err != nil {
+			http.Error(w, "Error fetching nearest IP Coordinates: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		jsonData, err := json.Marshal(nearestFromTheIp)
+		if err != nil {
+			http.Error(w, "Error encoding provider: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-	jsonData, err := json.Marshal(randomProvider)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(jsonData)
+	} else {
+
+		// Select one random provider
+		rand.Seed(time.Now().UnixNano())
+		randomIndex := rand.Intn(len(providers))
+		randomProvider := providers[randomIndex]
+
+		jsonData, err := json.Marshal(randomProvider)
+		if err != nil {
+			http.Error(w, "Error encoding provider: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(jsonData)
+	}
+}
+
+func isIPv4(address string) bool {
+	return len(address) >= 7 && address[0:7] == "/ip4/"
+}
+func Haversine(lat1, lon1, lat2, lon2 float64) float64 {
+	R := 6371.0 // Earth radius in kilometers
+
+	lat1_rad := math.Pi * lat1 / 180.0
+	lon1_rad := math.Pi * lon1 / 180.0
+	lat2_rad := math.Pi * lat2 / 180.0
+	lon2_rad := math.Pi * lon2 / 180.0
+
+	dlon := lon2_rad - lon1_rad
+	dlat := lat2_rad - lat1_rad
+
+	a := math.Sin(dlat/2)*math.Sin(dlat/2) + math.Cos(lat1_rad)*math.Cos(lat2_rad)*math.Sin(dlon/2)*math.Sin(dlon/2)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	distance := R * c
+	return distance
+}
+
+func GeolocateIP(ip string) (float64, float64, error) {
+	url := fmt.Sprintf("http://ip-api.com/json/%s", ip)
+	response, err := http.Get(url)
 	if err != nil {
-		http.Error(w, "Error encoding provider: "+err.Error(), http.StatusInternalServerError)
-		return
+		return 0.0, 0.0, fmt.Errorf("error geolocating IP address %s: %s", ip, err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode == 200 {
+		var data IpApiResponse
+		err := json.NewDecoder(response.Body).Decode(&data)
+		if err != nil {
+			return 0.0, 0.0, fmt.Errorf("error parsing response JSON: %s", err)
+		}
+
+		return data.Lat, data.Lon, nil
+	} else {
+		return 0.0, 0.0, fmt.Errorf("error geolocating IP address %s: %s", ip, response.Status)
+	}
+}
+
+func NearestIPCoordinate(ip string, ips []Provider) (Provider, error) {
+	var returnProvider Provider
+	givenLatitude, givenLongitude, err := GeolocateIP(ip)
+	if err != nil {
+		return Provider{}, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(jsonData)
+	var minDistance float64
+	var nearestIP string
+	first := true
+	for _, otherIP := range ips {
+		if otherIP.Address == ip {
+			continue
+		}
+
+		lat, lon, err := GeolocateIP(otherIP.Address)
+		if err != nil {
+			continue
+		}
+
+		dist := Haversine(givenLatitude, givenLongitude, lat, lon)
+		if first || dist < minDistance {
+			minDistance = dist
+			nearestIP = otherIP.Address
+			returnProvider = otherIP
+			first = false
+		}
+	}
+
+	if nearestIP == "" {
+		return Provider{}, fmt.Errorf("no nearby IP address found for %s", ip)
+	}
+
+	return returnProvider, nil
 }
 
 func main() {

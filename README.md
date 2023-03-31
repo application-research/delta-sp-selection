@@ -20,4 +20,5 @@ curl --location 'http://localhost:8080/api/providers?size_bytes=256
 ## Test the live version
 ```
 curl --location --request GET 'https://sp-select.delta.store/api/providers?size_bytes=256'
+curl --location --request GET 'https://sp-select.delta.store/api/providers?size_bytes=256&source_ip=108.89.91.150'
 ```
