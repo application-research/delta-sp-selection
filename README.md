@@ -1,6 +1,6 @@
 # Delta Storage Provider Selection
 
-Simple filcoin storage provider selection.
+Simple filecoin storage provider selection.
 - file size (min and max piece size)
 - verified FIL (soon)
 - geo location (soon)
