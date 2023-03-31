@@ -1,4 +1,4 @@
-# Simple SP Selection
+# Delta Storage Provide Selection
 
 Simple filcoin storage provider selection.
 
