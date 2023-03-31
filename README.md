@@ -1,6 +1,10 @@
-# Delta Storage Provide Selection
+# Delta Storage Provider Selection
 
 Simple filcoin storage provider selection.
+- file size (min and max piece size)
+- verified FIL (soon)
+- geo location (soon)
+- success rate throttle (soon)
 
 ## Running the app
 ```
@@ -15,5 +19,5 @@ curl --location 'http://localhost:8080/api/providers?size_bytes=256
 
 ## Test the live version
 ```
-curl --location --request GET 'https://simple-sp-selection.onrender.com/api/providers?min_piece_size_bytes=0&max_piece_size_bytes=34359738368'
+curl --location --request GET 'https://sp-select.delta.store/api/providers?size_bytes=256'
 ```
