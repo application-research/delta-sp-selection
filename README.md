@@ -15,12 +15,12 @@ go build -o simple-sp-selection
 ## Test the APIs
 ### Get a random SP within a given piece size range
 ```
-curl --location 'http://localhost:8080/api/providers?size_bytes=256
+curl --location 'http://localhost:8080/api/providers?size_bytes=256'
 ```
 
 ### Get a random SP within a given piece size range and IP address
 ```
-curl --location 'http://localhost:8080/api/providers?size_bytes=256&source_ip=108.89.91.150
+curl --location 'http://localhost:8080/api/providers?size_bytes=256&source_ip=108.89.91.150'
 ```
 
 ## Test the live version
