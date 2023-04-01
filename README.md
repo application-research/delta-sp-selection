@@ -1,6 +1,6 @@
 # Delta Storage Provider Selection
 
-Simple filcoin storage provider selection.
+Simple filecoin storage provider selection.
 - file size (min and max piece size)
 - verified FIL (soon)
 - geo location (soon)
@@ -12,9 +12,15 @@ go build -o simple-sp-selection
 ./simple-sp-selection
 ```
 
-## Get a random SP within a given piece size range
+## Test the APIs
+### Get a random SP within a given piece size range
 ```
-curl --location 'http://localhost:8080/api/providers?size_bytes=256
+curl --location 'http://localhost:8080/api/providers?size_bytes=256'
+```
+
+### Get a random SP within a given piece size range and IP address
+```
+curl --location 'http://localhost:8080/api/providers?size_bytes=256&source_ip=108.89.91.150'
 ```
 
 ## Test the live version
